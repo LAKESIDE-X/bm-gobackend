@@ -1,0 +1,13 @@
+# Environments
+.env
+
+# Go binaries
+/main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Uploads directory (we don't want to push test images)
+/uploads/
