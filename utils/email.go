@@ -15,7 +15,7 @@ func SendEmail(toEmail string, subject string, body string) error {
 
 	// 2. The actual email address the message is SENT FROM (Must be verified in Brevo!)
 	// If you used a different email to sign up for Brevo, change this string!
-	senderEmail := "bamidelefelix69@gmail.com"
+	senderEmail := "lekefrnk@gmail.com"
 
 	// 3. Construct the email message (Notice we added the "From:" header)
 	message := []byte(fmt.Sprintf("To: %s\r\n"+
