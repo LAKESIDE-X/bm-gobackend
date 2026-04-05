@@ -8,8 +8,8 @@ import (
 
 func SendEmail(toEmail string, subject string, body string) error {
 	// TEMPORARILY HARDCODE THESE TWO LINES:
-	from := "lekefrnk@gmail.com"
-	password := "sifbgxzjfqgfzsad"
+	from := "a73610001@smtp-brevo.com"
+	password := "bskE4XxANYzfMIc"
 
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
