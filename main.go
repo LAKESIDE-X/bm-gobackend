@@ -14,10 +14,10 @@ import (
 )
 
 func main() {
-	// 1. Load the .env file
+	// 1. Load the .env file (Fixed to prevent crashing on Render!)
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("No .env file found, relying on environment variables instead.")
 	}
 
 	// 2. Connect to the Database
@@ -25,11 +25,14 @@ func main() {
 
 	// 3. Initialize the Gin router
 	router := gin.Default()
+
+	// --- THIS IS THE MAGIC LINE YOU ADDED TO SERVE IMAGES ---
 	router.Static("/uploads", "./uploads")
 
 	// --- NEW OFFICIAL CORS CONFIGURATION ---
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Explicitly trust your React app!
+		// Explicitly trust your React app AND your Render domain
+		AllowOrigins:     []string{"http://localhost:5173", "https://bm-gobackend.onrender.com"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -51,7 +54,7 @@ func main() {
 	routes.ReviewRoutes(router)
 	routes.CartRoutes(router)
 	routes.OrderRoutes(router)
-	routes.AdminRoutes(router) // Assuming you created this earlier
+	routes.AdminRoutes(router)
 
 	// 6. Start the server
 	port := os.Getenv("PORT")
