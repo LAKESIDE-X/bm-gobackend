@@ -21,51 +21,50 @@ func CreateProduct(c *gin.Context) {
 	description := c.PostForm("description")
 	priceStr := c.PostForm("price")
 	stockStr := c.PostForm("stock")
-	categorySlug := c.PostForm("categorySlug")
-	brandSlug := c.PostForm("brandSlug")
 
-	// Convert Price and Stock to numbers
+	// UPGRADE: We now expect the IDs of the Category and Brand from the frontend dropdowns
+	categoryIDStr := c.PostForm("categoryId")
+	brandIDStr := c.PostForm("brandId")
+
+	// Convert strings to numbers
 	price, _ := strconv.ParseFloat(priceStr, 64)
 	stock, _ := strconv.Atoi(stockStr)
+	categoryID, _ := strconv.Atoi(categoryIDStr)
+	brandID, _ := strconv.Atoi(brandIDStr)
 
 	// Handle the Image Upload
 	var imageURL string
 	file, err := c.FormFile("image")
 
 	if err == nil {
-		// Create the uploads folder if it doesn't exist
 		uploadDir := "uploads/products"
 		if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
 			os.MkdirAll(uploadDir, os.ModePerm)
 		}
 
-		// Create a unique filename using the current timestamp
 		filename := fmt.Sprintf("%d_%s", time.Now().Unix(), filepath.Base(file.Filename))
 		filePath := filepath.Join(uploadDir, filename)
 
-		// Save the physical file to our server
 		if err := c.SaveUploadedFile(file, filePath); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to save image"})
 			return
 		}
 
-		// The URL path we will save in the database so React can fetch it
 		imageURL = "/" + filepath.ToSlash(filePath)
 	} else {
-		// If no image was uploaded, assign an empty string (or a placeholder path later)
 		imageURL = ""
 	}
 
-	// Assemble the Product model
+	// Assemble the Product model using the new Foreign Keys
 	product := models.Product{
 		Name:        name,
 		Description: description,
 		Price:       price,
 		Stock:       stock,
-		Category:    categorySlug,
-		Brand:       brandSlug,
+		CategoryID:  uint(categoryID), // Assigning the ID to the relation
+		BrandID:     uint(brandID),    // Assigning the ID to the relation
 		ImageURL:    imageURL,
-		IsActive:    true, // Default to active
+		IsActive:    true,
 	}
 
 	// Save to Database
@@ -84,14 +83,12 @@ func CreateProduct(c *gin.Context) {
 func GetProducts(c *gin.Context) {
 	var products []models.Product
 
-	// Only fetch products where IsActive is true.
-	// We use GORM's Find method to get an array of records.
-	if err := database.DB.Where("is_active = ?", true).Find(&products).Error; err != nil {
+	// UPGRADE: Added .Preload("Category") and .Preload("Brand") to fetch the related data!
+	if err := database.DB.Preload("Category").Preload("Brand").Where("is_active = ?", true).Find(&products).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch products"})
 		return
 	}
 
-	// Your React frontend expects this exact structure!
 	c.JSON(http.StatusOK, gin.H{
 		"data": products,
 	})
@@ -99,11 +96,11 @@ func GetProducts(c *gin.Context) {
 
 // 3. GET SINGLE PRODUCT (Public)
 func GetProductByID(c *gin.Context) {
-	// Grab the ID from the URL (e.g., /api/v1/products/5)
 	id := c.Param("id")
 	var product models.Product
 
-	if err := database.DB.First(&product, id).Error; err != nil {
+	// UPGRADE: Preload here too!
+	if err := database.DB.Preload("Category").Preload("Brand").First(&product, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Product not found"})
 		return
 	}
@@ -118,20 +115,16 @@ func UpdateProduct(c *gin.Context) {
 	id := c.Param("id")
 	var product models.Product
 
-	// First, check if the product actually exists
 	if err := database.DB.First(&product, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Product not found"})
 		return
 	}
 
-	// Bind the incoming JSON to update the fields
-	// Note: If you want to update images later, this function will need to be updated to use FormData too!
 	if err := c.ShouldBindJSON(&product); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid update data"})
 		return
 	}
 
-	// Save the changes back to the database
 	database.DB.Save(&product)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -150,9 +143,6 @@ func DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// Because we added gorm.DeletedAt to our Product model earlier,
-	// this doesn't actually erase it from the hard drive. It does a "Soft Delete",
-	// meaning it just hides it, keeping your past order histories perfectly intact!
 	database.DB.Delete(&product)
 
 	c.JSON(http.StatusOK, gin.H{

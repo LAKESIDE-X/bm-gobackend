@@ -39,7 +39,7 @@ func ConnectDB() {
 
 	// 4. Run Migrations
 	log.Println("Running Database Migrations...")
-	err = db.AutoMigrate(&models.User{}, &models.Product{}, &models.CartItem{}, &models.Order{}, &models.OrderItem{}, &models.Review{}, &models.OTP{})
+	err = db.AutoMigrate(&models.User{}, &models.Product{}, &models.CartItem{}, &models.Order{}, &models.OrderItem{}, &models.Review{}, &models.OTP{}, &models.Brand{}, &models.Category{}, &models.Product{})
 	if err != nil {
 		log.Fatal("Failed to migrate database: \n", err)
 	}
