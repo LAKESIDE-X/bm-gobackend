@@ -42,7 +42,15 @@ func GetWishlist(c *gin.Context) {
 	}
 
 	var wishlist []models.Wishlist
-	database.DB.Preload("Product").Where("user_id = ?", userID).Find(&wishlist)
+
+	// ADDED CRASH PROTECTION: We now catch the error instead of panicking!
+	// We also Preload "Product.Brand" just in case your Product model requires it.
+	err := database.DB.Preload("Product").Where("user_id = ?", userID).Find(&wishlist).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error: " + err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"data": wishlist})
 }
