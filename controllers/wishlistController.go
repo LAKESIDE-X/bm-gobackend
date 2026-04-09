@@ -11,22 +11,23 @@ import (
 // --- BULLETPROOF HELPER FUNCTION ---
 // Safely extracts the User ID no matter how the Auth Middleware saved it
 func getSafeUserID(c *gin.Context) uint {
-	userVal, exists := c.Get("user")
+	// THE FIX IS HERE: Changed "user" to "userID" to match your middleware!
+	userVal, exists := c.Get("userID")
 	if !exists {
 		return 0
 	}
 
 	switch v := userVal.(type) {
 	case models.User:
-		return v.ID // Middleware saved the whole struct
+		return v.ID
 	case *models.User:
-		return v.ID // Middleware saved a pointer to the struct
+		return v.ID
 	case float64:
-		return uint(v) // Middleware saved a JWT parsed number
+		return uint(v)
 	case uint:
-		return v // Middleware saved a perfect uint
+		return v
 	case int:
-		return uint(v) // Middleware saved a standard int
+		return uint(v)
 	default:
 		return 0
 	}
