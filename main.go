@@ -57,6 +57,7 @@ func main() {
 	routes.AdminRoutes(router)
 	routes.CategoryRoutes(router)
 	routes.BrandRoutes(router)
+	routes.WishlistRoutes(router)
 
 	// 6. Start the server
 	port := os.Getenv("PORT")
