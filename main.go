@@ -32,7 +32,7 @@ func main() {
 	// --- NEW OFFICIAL CORS CONFIGURATION ---
 	router.Use(cors.New(cors.Config{
 		// Explicitly trust your React app AND your Render domain
-		AllowOrigins:     []string{"http://localhost:5173", "https://bm-gobackend.onrender.com"},
+		AllowOrigins:     []string{"http://localhost:5173", "https://bm-gobackend.onrender.com", "https://bm-working-frontend.vercel.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
