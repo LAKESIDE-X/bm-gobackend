@@ -88,18 +88,26 @@ func UpdateProduct(c *gin.Context) {
 	id := c.Param("id")
 	var product models.Product
 
+	// 1. Check if the product exists first
 	if err := database.DB.First(&product, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Product not found"})
 		return
 	}
 
-	// For updates, we can use JSON binding
-	if err := c.ShouldBindJSON(&product); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid update data"})
+	// 2. Use a Map to catch the incoming data.
+	// This stops the "Invalid update data" error because maps don't care about strict naming!
+	var updateData map[string]interface{}
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON format"})
 		return
 	}
 
-	database.DB.Save(&product)
+	// 3. Update the record using GORM's .Updates()
+	// This will only change the fields you actually sent from React
+	if err := database.DB.Model(&product).Updates(updateData).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update product in database"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Product updated successfully",
