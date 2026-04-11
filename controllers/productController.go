@@ -1,12 +1,8 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"bm-pharmacy-api/database"
 	"bm-pharmacy-api/models"
@@ -14,17 +10,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 1. CREATE PRODUCT (Admin Only - Handles Image Uploads)
+// 1. CREATE PRODUCT (Admin Only - Now accepts Cloudinary URL from Frontend)
 func CreateProduct(c *gin.Context) {
 	// Parse the text fields from the FormData
 	name := c.PostForm("name")
 	description := c.PostForm("description")
 	priceStr := c.PostForm("price")
 	stockStr := c.PostForm("stock")
-
-	// UPGRADE: We now expect the IDs of the Category and Brand from the frontend dropdowns
 	categoryIDStr := c.PostForm("categoryId")
 	brandIDStr := c.PostForm("brandId")
+
+	// NEW: We now just take the ImageURL as a string from the frontend
+	// React will handle the Cloudinary upload and pass the link here
+	imageURL := c.PostForm("imageUrl")
 
 	// Convert strings to numbers
 	price, _ := strconv.ParseFloat(priceStr, 64)
@@ -32,38 +30,15 @@ func CreateProduct(c *gin.Context) {
 	categoryID, _ := strconv.Atoi(categoryIDStr)
 	brandID, _ := strconv.Atoi(brandIDStr)
 
-	// Handle the Image Upload
-	var imageURL string
-	file, err := c.FormFile("image")
-
-	if err == nil {
-		uploadDir := "uploads/products"
-		if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
-			os.MkdirAll(uploadDir, os.ModePerm)
-		}
-
-		filename := fmt.Sprintf("%d_%s", time.Now().Unix(), filepath.Base(file.Filename))
-		filePath := filepath.Join(uploadDir, filename)
-
-		if err := c.SaveUploadedFile(file, filePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to save image"})
-			return
-		}
-
-		imageURL = "/" + filepath.ToSlash(filePath)
-	} else {
-		imageURL = ""
-	}
-
-	// Assemble the Product model using the new Foreign Keys
+	// Assemble the Product model
 	product := models.Product{
 		Name:        name,
 		Description: description,
 		Price:       price,
 		Stock:       stock,
-		CategoryID:  uint(categoryID), // Assigning the ID to the relation
-		BrandID:     uint(brandID),    // Assigning the ID to the relation
-		ImageURL:    imageURL,
+		CategoryID:  uint(categoryID),
+		BrandID:     uint(brandID),
+		ImageURL:    imageURL, // This is now a permanent Cloudinary link!
 		IsActive:    true,
 	}
 
@@ -83,8 +58,7 @@ func CreateProduct(c *gin.Context) {
 func GetProducts(c *gin.Context) {
 	var products []models.Product
 
-	// UPGRADE: Added .Preload("Category") and .Preload("Brand") to fetch the related data!
-	if err := database.DB.Preload("Category").Preload("Brand").Where("is_active = ?", true).Find(&products).Error; err != nil {
+	if err := database.DB.Preload("Category").Preload("Brand").Where("is_active = ?", true).Order("created_at desc").Find(&products).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch products"})
 		return
 	}
@@ -99,7 +73,6 @@ func GetProductByID(c *gin.Context) {
 	id := c.Param("id")
 	var product models.Product
 
-	// UPGRADE: Preload here too!
 	if err := database.DB.Preload("Category").Preload("Brand").First(&product, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Product not found"})
 		return
@@ -120,6 +93,7 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	// For updates, we can use JSON binding
 	if err := c.ShouldBindJSON(&product); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid update data"})
 		return
