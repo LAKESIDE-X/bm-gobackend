@@ -39,9 +39,7 @@ func GetCategories(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": categories,
-	})
+	c.JSON(http.StatusOK, categories)
 }
 
 // 3. DELETE CATEGORY (Admin Only)

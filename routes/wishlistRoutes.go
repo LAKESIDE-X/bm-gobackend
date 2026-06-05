@@ -17,5 +17,7 @@ func WishlistRoutes(router *gin.Engine) {
 		wishlistGroup.POST("", controllers.AddToWishlist)
 		wishlistGroup.DELETE("/:id", controllers.RemoveFromWishlist)
 		wishlistGroup.GET("/check/:id", controllers.CheckWishlistStatus)
+		wishlistGroup.GET("/count", controllers.GetWishlistCount)
+		wishlistGroup.POST("/:id/move-to-cart", controllers.MoveToCart)
 	}
 }

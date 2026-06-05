@@ -108,16 +108,137 @@ func Checkout(c *gin.Context) {
 	}
 }
 
+// Helper to transform backend Order to frontend-compatible format
+func buildOrderResponse(order models.Order) gin.H {
+	itemCount := 0
+	items := make([]gin.H, 0, len(order.OrderItems))
+	for _, item := range order.OrderItems {
+		itemCount += item.Quantity
+		items = append(items, gin.H{
+			"productId": item.ProductID,
+			"name":      item.Product.Name,
+			"quantity":  item.Quantity,
+			"unitPrice": item.PriceAtPurchase,
+			"subtotal":  item.PriceAtPurchase * float64(item.Quantity),
+		})
+	}
+
+	paymentStatus := "PENDING"
+	if order.Status == "PAID" || order.Status == "PROCESSING" || order.Status == "SHIPPED" || order.Status == "DELIVERED" {
+		paymentStatus = "SUCCESS"
+	} else if order.Status == "CANCELLED" {
+		paymentStatus = "FAILED"
+	}
+
+	// Try to parse shipping address as JSON object, fallback to string wrap
+	var shippingAddress interface{} = order.ShippingAddress
+
+	return gin.H{
+		"id":              order.ID,
+		"status":          order.Status,
+		"totalAmount":     order.TotalAmount,
+		"itemCount":       itemCount,
+		"items":           items,
+		"paymentStatus":   paymentStatus,
+		"shippingAddress": shippingAddress,
+		"createdAt":       order.CreatedAt,
+		"updatedAt":       order.UpdatedAt,
+	}
+}
+
 // 2. GET USER ORDERS (Order History)
 func GetUserOrders(c *gin.Context) {
 	userID := getUserID(c)
 	var orders []models.Order
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "20")
+	status := c.Query("status")
 
-	// Preload the OrderItems AND the Product details inside those OrderItems!
-	if err := database.DB.Preload("OrderItems.Product").Where("user_id = ?", userID).Order("created_at desc").Find(&orders).Error; err != nil {
+	// Count total orders
+	query := database.DB.Model(&models.Order{}).Where("user_id = ?", userID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var total int64
+	query.Count(&total)
+
+	// Get paginated orders
+	query = database.DB.Preload("OrderItems.Product").Where("user_id = ?", userID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	offset := (parseInt(page) - 1) * parseInt(limit)
+	if err := query.Order("created_at desc").Limit(parseInt(limit)).Offset(offset).Find(&orders).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch orders"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": orders})
+	totalPages := (total + int64(parseInt(limit)) - 1) / int64(parseInt(limit))
+
+	// Transform orders to frontend format
+	transformedOrders := make([]gin.H, 0, len(orders))
+	for _, order := range orders {
+		transformedOrders = append(transformedOrders, buildOrderResponse(order))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"orders": transformedOrders,
+		"pagination": gin.H{
+			"total":      total,
+			"page":       parseInt(page),
+			"limit":      parseInt(limit),
+			"totalPages": totalPages,
+		},
+	})
+}
+
+// 3. GET ORDER BY ID
+func GetOrderById(c *gin.Context) {
+	userID := getUserID(c)
+	orderID := c.Param("id")
+
+	var order models.Order
+	if err := database.DB.Preload("OrderItems.Product").Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Order not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, buildOrderResponse(order))
+}
+
+// 4. CANCEL ORDER
+func CancelOrder(c *gin.Context) {
+	userID := getUserID(c)
+	orderID := c.Param("id")
+
+	var order models.Order
+	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Order not found"})
+		return
+	}
+
+	// Only allow cancellation if order is pending
+	if order.Status != "PENDING" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Cannot cancel an order that is not pending"})
+		return
+	}
+
+	// Update order status
+	if err := database.DB.Model(&order).Update("status", "CANCELLED").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to cancel order"})
+		return
+	}
+
+	// Restore stock for each item
+	for _, item := range order.OrderItems {
+		var product models.Product
+		if err := database.DB.First(&product, item.ProductID).Error; err == nil {
+			database.DB.Model(&product).Update("stock", product.Stock+item.Quantity)
+		}
+	}
+
+	// Refresh order data with items
+	database.DB.Preload("OrderItems.Product").First(&order, order.ID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Order cancelled successfully", "data": buildOrderResponse(order)})
 }

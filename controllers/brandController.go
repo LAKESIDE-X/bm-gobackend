@@ -38,9 +38,7 @@ func GetBrands(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": brands,
-	})
+	c.JSON(http.StatusOK, brands)
 }
 
 // 3. DELETE BRAND (Admin Only)

@@ -57,14 +57,39 @@ func CreateProduct(c *gin.Context) {
 // 2. GET ALL PRODUCTS (Public)
 func GetProducts(c *gin.Context) {
 	var products []models.Product
+	pageStr := c.DefaultQuery("page", "1")
+	limitStr := c.DefaultQuery("limit", "20")
+	page, _ := strconv.Atoi(pageStr)
+	limit, _ := strconv.Atoi(limitStr)
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
 
-	if err := database.DB.Preload("Category").Preload("Brand").Where("is_active = ?", true).Order("created_at desc").Find(&products).Error; err != nil {
+	// Count total
+	var total int64
+	database.DB.Model(&models.Product{}).Where("is_active = ?", true).Count(&total)
+
+	offset := (page - 1) * limit
+	if err := database.DB.Preload("Category").Preload("Brand").Where("is_active = ?", true).Order("created_at desc").Limit(limit).Offset(offset).Find(&products).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch products"})
 		return
 	}
 
+	totalPages := (total + int64(limit) - 1) / int64(limit)
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": products,
+		"meta": gin.H{
+			"currentPage":     page,
+			"itemsPerPage":    limit,
+			"totalItems":      total,
+			"totalPages":      totalPages,
+			"hasNextPage":     page < int(totalPages),
+			"hasPreviousPage": page > 1,
+		},
 	})
 }
 
@@ -78,9 +103,7 @@ func GetProductByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": product,
-	})
+	c.JSON(http.StatusOK, product)
 }
 
 // 4. UPDATE PRODUCT (Admin Only)

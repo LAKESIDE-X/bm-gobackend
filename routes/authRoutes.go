@@ -15,5 +15,6 @@ func AuthRoutes(router *gin.Engine) {
 		authGroup.POST("/forgot-password", controllers.ForgotPassword)
 		authGroup.POST("/reset-password", controllers.ResetPassword)
 		authGroup.POST("/send-registration-otp", controllers.SendRegistrationOTP)
+		authGroup.POST("/google", controllers.GoogleAuth)
 	}
 }

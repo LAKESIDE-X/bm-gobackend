@@ -1,13 +1,16 @@
 package controllers
 
 import (
+	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"bm-pharmacy-api/database"
 	"bm-pharmacy-api/models"
 	"bm-pharmacy-api/utils"
 
+	"cloud.google.com/go/auth/credentials/idtoken"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,6 +19,10 @@ import (
 type LoginInput struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+type GoogleLoginInput struct {
+	Credential string `json:"credential" binding:"required"`
 }
 
 // Struct to safely catch incoming Registration data
@@ -30,6 +37,65 @@ type RegisterInput struct {
 
 type SendOTPInput struct {
 	Email string `json:"email" binding:"required,email"`
+}
+
+func GoogleAuth(c *gin.Context) {
+	var input GoogleLoginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Google credential is required"})
+		return
+	}
+
+	// IMPORTANT: Replace with your actual Google Client ID from the Cloud Console
+	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
+	if googleClientID == "" {
+		googleClientID = "731134407052-ucqkk7r8m5inhg7bqno6ppkt6jafein6.apps.googleusercontent.com"
+	}
+
+	// 1. Validate the token with Google's servers
+	payload, err := idtoken.Validate(context.Background(), input.Credential, googleClientID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid Google token"})
+		return
+	}
+
+	// Extract user info from the validated token payload
+	email, _ := payload.Claims["email"].(string)
+	firstName, _ := payload.Claims["given_name"].(string)
+	lastName, _ := payload.Claims["family_name"].(string)
+
+	var user models.User
+
+	// 2. Check if user already exists in our database
+	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		// User doesn't exist yet, so we register them automatically
+		user = models.User{
+			FirstName: firstName,
+			LastName:  lastName,
+			Email:     email,
+			// Generate a random secure string for the password since they use Google
+			Password: utils.GenerateRandomString(16),
+			Role:     "USER",
+		}
+		if createErr := database.DB.Create(&user).Error; createErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create user account"})
+			return
+		}
+	}
+
+	// 3. Generate your standard JWT token for the session
+	token, err := utils.GenerateToken(user.ID, user.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to generate session token"})
+		return
+	}
+
+	// 4. Send the same response structure as your standard Login
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Google Login successful",
+		"accessToken": token,
+		"user":        user,
+	})
 }
 
 // -----------------------------------------
@@ -123,10 +189,18 @@ func Register(c *gin.Context) {
 	// Delete the used OTP so it cannot be reused
 	database.DB.Delete(&otpRecord)
 
+	// Generate JWT Token for auto-login
+	token, err := utils.GenerateToken(user.ID, user.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Registration successful but failed to generate token"})
+		return
+	}
+
 	// Send success response
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Registration successful",
-		"user":    user,
+		"message":     "Registration successful",
+		"accessToken": token,
+		"user":        user,
 	})
 }
 
@@ -164,9 +238,9 @@ func Login(c *gin.Context) {
 
 	// Send token to frontend
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Login successful",
-		"token":   token,
-		"user":    user,
+		"message":     "Login successful",
+		"accessToken": token,
+		"user":        user,
 	})
 }
 
@@ -181,7 +255,7 @@ type ResetPasswordInput struct {
 }
 
 // -----------------------------------------
-// 4. FORGOT PASSWORD (Send OTP)
+// 5. FORGOT PASSWORD (Send OTP)
 // -----------------------------------------
 func ForgotPassword(c *gin.Context) {
 	var input ForgotPasswordInput

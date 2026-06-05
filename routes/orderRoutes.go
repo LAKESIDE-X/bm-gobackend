@@ -15,6 +15,7 @@ func OrderRoutes(router *gin.Engine) {
 	{
 		orderGroup.POST("/checkout", controllers.Checkout)
 		orderGroup.GET("", controllers.GetUserOrders)
-		// You can add the /:id and /:id/cancel routes here later!
+		orderGroup.GET("/:id", controllers.GetOrderById)
+		orderGroup.PATCH("/:id/cancel", controllers.CancelOrder)
 	}
 }
